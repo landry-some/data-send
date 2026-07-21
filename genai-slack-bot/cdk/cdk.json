@@ -1,0 +1,124 @@
+{
+  "app": "npx ts-node --prefer-ts-exts bin/cdk.ts",
+  "context": {
+    "assetId": "1664097655636493108",
+    "description": "Cloud Resources for ics-rtp-automation/training-slack-chatbot",
+    "gitOrg": "ics-rtp-automation",
+    "gitRepo": "training-slack-chatbot",
+    "service_name": "chatbot-service",
+    "pr": {
+      "427732248780": {
+        "us-west-2": {
+          "vpcId": "vpc-0d011d35cffe6b922",
+          "privateSubnetIds": [
+            "subnet-091e223c8d9d9c26f",
+            "subnet-038afcd24015c9100",
+            "subnet-04ff6d826f15e630b"
+          ],
+          "availabilityZones": [
+            "us-west-2a",
+            "us-west-2b",
+            "us-west-2c"
+          ],
+          "envVars": {
+            "GREETING": "Welcome, "
+          },
+          "hostedZoneId" : "Z04125011IYTR3KRQ2HRY",
+          "domainTld" : "icsauto-dev.a.jsguru.com",
+          "regionCertArn" : "arn:aws:acm:us-west-2:427732248780:certificate/cb5667c5-68e7-4d0c-865a-a29f7fb51009",
+          "lmaEnvVars" : {
+              "audience" : "https://chatbot-pr-us-west-2.icsauto-dev.a.jsguru.com/",
+              "issuer" : "jsguru.cto.gateway",
+              "enable" : "1"
+          }
+        }
+      }
+    },
+    "qal": {
+      "427732248780": {
+        "us-west-2": {
+          "vpcId": "vpc-0d011d35cffe6b922",
+          "privateSubnetIds": [
+            "subnet-091e223c8d9d9c26f",
+            "subnet-038afcd24015c9100",
+            "subnet-04ff6d826f15e630b"
+          ],
+          "availabilityZones": [
+            "us-west-2a",
+            "us-west-2b",
+            "us-west-2c"
+          ],
+          "envVars": {
+            "GREETING": "Welcome, "
+          },
+          "hostedZoneId" : "Z04125011IYTR3KRQ2HRY",
+          "domainTld" : "icsauto-dev.a.jsguru.com",
+          "regionCertArn" : "arn:aws:acm:us-west-2:427732248780:certificate/cb5667c5-68e7-4d0c-865a-a29f7fb51009",
+          "lmaEnvVars" : {
+              "audience" : "https://chatbot-qal-us-west-2.icsauto-dev.a.jsguru.com/",
+              "issuer" : "jsguru.cto.gateway",
+              "enable" : "1"
+          }
+        }
+      }
+    },
+    "e2e": {
+      "427732248780": {
+        "us-west-2": {
+          "vpcId": "vpc-0d011d35cffe6b922",
+          "privateSubnetIds": [
+            "subnet-091e223c8d9d9c26f",
+            "subnet-038afcd24015c9100",
+            "subnet-04ff6d826f15e630b"
+          ],
+          "availabilityZones": [
+            "us-west-2a",
+            "us-west-2b",
+            "us-west-2c"
+          ],
+          "envVars": {
+            "GREETING": "Welcome, "
+          },
+          "hostedZoneId" : "Z04125011IYTR3KRQ2HRY",
+          "domainTld" : "icsauto-dev.a.jsguru.com",
+          "regionCertArn" : "arn:aws:acm:us-west-2:427732248780:certificate/cb5667c5-68e7-4d0c-865a-a29f7fb51009",
+          "lmaEnvVars" : {
+              "audience" : "https://chatbot-e2e-us-west-2.icsauto-dev.a.jsguru.com/",
+              "issuer" : "jsguru.cto.gateway",
+              "enable" : "1"
+          }
+        }
+      }
+    },
+    "serverlessConfig": {
+      "oim": {
+        "enabled": true,
+        "serviceTypes": [
+          "LAMBDA"
+        ]
+      },
+      "oil": {
+        "enabled": true,
+        "qal": {
+          "environment": "E2E",
+          "businessUnit": "SBSEG",
+          "index": "lambda_logs"
+        },
+        "e2e": {
+          "environment": "E2E",
+          "businessUnit": "SBSEG",
+          "index": "lambda_logs"
+        },
+        "pr": {
+          "environment": "E2E",
+          "businessUnit": "SBSEG",
+          "index": "lambda_logs"
+        }
+      }
+    },
+    "vendedLambdaNames": [
+      "chatbot"
+    ],
+    "apiName": "chatbot"
+  }
+}

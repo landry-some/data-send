@@ -1,0 +1,4 @@
+# https://coverage.readthedocs.io/en/coverage-4.5.1/config.html#config
+[run]
+omit = integration_test/*,test/*
+source = .

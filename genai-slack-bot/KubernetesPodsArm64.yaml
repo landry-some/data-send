@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cloud-resource-jenkins-build-pods-arm64
+spec:
+  containers:
+  - name: jnlp
+    image: docker.jsguru.com/docker-rmt/jenkins/inbound-agent:latest
+    tty: true
+    args: ["$(JENKINS_SECRET)", "$(JENKINS_AGENT_NAME)", "-url", "$(JENKINS_URL)"]
+  - name: podman-arm64
+    image: docker.jsguru.com/oicp/standard/podman:v3.4.7
+    tty: true
+    command: ["cat"]
+    imagePullPolicy: Always
+    volumeMounts:
+    - name: container-storage
+      mountPath: /var/lib/containers
+    resources:
+      limits:
+        github.com/fuse: 1
+    securityContext:
+      capabilities:
+        add: ["SYS_ADMIN", "SYS_RESOURCE"]              
+  nodeSelector:
+    eks.k8s.io/instancegroup: build-arm
+  tolerations:
+  - key: ig/buildarm
+  volumes:
+  - name: container-storage
+    emptyDir: {}

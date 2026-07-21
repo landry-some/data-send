@@ -1,0 +1,8 @@
+local:
+  - name: chatbot
+    path: lambdas/chatbot/Dockerfile
+    architecture: amd64
+
+external:
+  - name: lma
+    image_uri: docker.artifactory.a.jsguru.com/dev-integration/api-authorizer-lambda/service/api-authorizer-lambda:1.0.0

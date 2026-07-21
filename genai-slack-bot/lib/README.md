@@ -1,0 +1,1 @@
+This is a directory where shared modules can be stored. 

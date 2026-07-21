@@ -1,0 +1,228 @@
+// The library version is controled from the Jenkins configuration
+// To force a version add after lib '@' followed by the version.
+@Library(value = 'msaas-shared-lib', changelog = false) _
+
+node {
+    // setup the global static configuration
+    config = setupServerlessPipeline('msaas-config.yaml')
+}
+
+pipeline {
+
+    agent {
+        kubernetes {
+            label "${config.pod_label}"
+            yamlFile 'KubernetesPods.yaml'
+        }
+    }
+
+    post {
+        always {
+            postServerlessPipeline(config)
+        }
+        fixed {
+            emailext(
+                subject: "Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' ${currentBuild.result}",
+                body: """
+                        Job Status for '${env.JOB_NAME} [${env.BUILD_NUMBER}]': ${currentBuild.result}\n\nCheck console output at ${env.BUILD_URL}
+                    """,
+                to: "${config.mailRecipients}"
+            )
+        }
+        unsuccessful {
+            emailext(
+                subject: "Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' ${currentBuild.result}",
+                body: """
+                        Job Status for '${env.JOB_NAME} [${env.BUILD_NUMBER}]': ${currentBuild.result}\n\nCheck console output at ${env.BUILD_URL}
+                    """,
+                to: "${config.mailRecipients}"
+            )
+        }
+        aborted {
+            updateAbortMessages(config)
+        }
+    }
+
+    stages {
+        stage('Check Skip CI') {
+            steps {
+                checkSkipCI()
+            }
+        }
+        stage('Build') {
+            stages {
+                stage('Prepare Build') {
+                    parallel {
+                        stage('Pull Base Images') {
+                            steps {
+                                prepullContainerImages(config)
+                            }
+                        }
+                        stage('Get Next Release Version') {
+                            steps {
+                                container('cdtools') {
+                                    autoPRCheck()
+                                    autoReleaseVersion(config)
+                                }
+                            }
+                        }
+                    }
+                }
+                stage('Build Container & Infra Package') {
+                    parallel {
+                        stage('CDK Package/ Unit Tests') {
+                            steps {
+                                container('podman') {
+                                    writeCelloMetadata(config)
+                                    podmanBuild("--rm=false -t cdk --build-arg build=${env.BUILD_URL} -f Dockerfile.cdk .")
+                                    podmanMount(podmanFindImage([cdk: env.BUILD_URL]), {steps,mount ->
+                                            sh(label: 'copy outputs', script: "cp -r ${mount}/cdk ${env.WORKSPACE}")
+                                        })
+                                }
+                            }
+                        }
+                        // backwards compatible with single root lambda, currently vended model as of 2022/02/10
+                        stage('Root Image/ Unit Tests') { 
+                            when {expression {return fileExists('Dockerfile')}}
+                            steps {
+                                container('podman') {
+                                    podmanBuildAndPush(config, '.', "--build-arg lambdaHandler=${config.lambdaHandler}")
+                                    podmanMount(podmanFindImage([image: 'build', build: env.BUILD_URL]), {steps,mount ->
+                                            sh(label: 'copy code coverage results to workspace', script: "cp -r ${mount}/home/root/coverage ${env.WORKSPACE}")
+                                        })
+                                }
+                            }
+                        }
+                        // iteration of local section from config
+                        stage('Mapped Images - arm64') {
+                            when {beforeAgent true; expression {return celloMappedImagesExist(config, "${config.infraDir}/image-mappings.yaml", "arm64")}}
+                            agent {
+                                kubernetes {
+                                    label "arm64-build-${UUID.randomUUID().toString()}"
+                                    yamlFile 'KubernetesPodsArm64.yaml'
+                                }
+                            }
+                            steps {
+                                container('podman-arm64') {
+                                    iterateLocalImageMappings(config, {entry,cfg -> podmanBuildAndPush(cfg, entry['path'], "--build-arg lambdaHandler=${cfg.lambdaHandler} --build-arg arch=arm64")}, "arm64")
+                                }
+                            }
+                        } 
+                        stage('Mapped Images - amd64') {
+                            when {beforeAgent true; expression {return celloMappedImagesExist(config, "${config.infraDir}/image-mappings.yaml", "amd64")}}
+                            steps {
+                                container('podman') {
+                                    iterateLocalImageMappings(config, {entry,cfg -> podmanBuildAndPush(cfg, entry['path'], "--build-arg lambdaHandler=${cfg.lambdaHandler}")})
+                                }
+                            }
+                        }
+                    }
+                }
+                stage('Publish') {
+                    parallel {
+                        stage('Upload CDK Package, Test Results & Prepare Release') {
+                            stages {
+                                stage('Upload CDK Package') {
+                                    steps {
+                                        sh(label: 'Compress artifact', script: "tar -czf cdk-${config.version}.tar.gz -C ${env.WORKSPACE}/cdk .")
+                                        uploadToArtifactoryGeneric(config.service_name, "cdk-${config.version}.tar.gz", "${config.generic_artifactory_repo}/cdk-${config.version}.tar.gz")
+                                    }
+                                }
+                                stage('Code Coverage & Unit Test Results') {
+                                    stages {
+                                        stage('CodeCov') {
+                                            steps {
+                                              codeCov(config)
+                                            }
+                                        }
+                                        stage('JUnit Coverage') {
+                                            when {expression {return sh(returnStdout: true, script: "find . -path '${config.unitTestReportFile}'").trim() != ''}}
+                                            steps {
+                                              junit "${config.unitTestReportFile}"
+                                            }
+                                        }
+                                        stage('Jacoco Coverage') {
+                                            when {expression {return fileExists("${env.WORKSPACE}/coverage/target/test-results/coverage/jacoco/jacoco.exec")}}
+                                            steps {
+                                                jacoco()
+                                            }
+                                        }
+                                        stage('Report Cobertura') {
+                                            when {expression {return sh(returnStdout: true, script: "find . -path '${config.coberturaReportFile}'").trim() != ''}}
+                                            steps {
+                                              jsguruReportCobertura(config)
+                                            }
+                                        }
+                                    }
+                                }
+                                stage('Prepare Release') {
+                                    when { expression { return env.BRANCH_NAME == config.defaultBranch && !skipRelease(config) } }
+                                        steps {
+                                            container('cdtools') {
+                                            sh(label: 'Stash changes and clean working directory', script: 'git stash save --all')
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        stage('CPD Certification') {
+                            steps {
+                                container('cpd2') {
+                                    script {
+                                        if (fileExists('Dockerfile')) {
+                                            jsguruCPD2Podman(config, "-i ${config.image_full_name} --buildfile Dockerfile")
+                                        }
+                                        if (fileExists("${config.infraDir}/image-mappings.yaml")) {
+                                            iterateLocalImageMappings(config, {entry,cfg ->
+                                                    def buildfile = entry['path']
+                                                    if (!buildfile.split('/').last().contains('Dockerfile')) {
+                                                        buildfile += '/Dockerfile'
+                                                    }
+                                                    jsguruCPD2Podman(cfg, "-i ${cfg.image_full_name} --buildfile ${buildfile}")
+                                                })
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                stage('Create Release') {
+                    when {
+                        beforeOptions true
+                        expression {
+                            return env.BRANCH_NAME == config.defaultBranch && !skipRelease(config)
+                        }
+                    }
+                    options {
+                        lock(resource: "${config.asset_id}-git", inversePrecedence: true, variable: 'lockResource')
+                        timeout(time: 22, unit: 'MINUTES')
+                    }
+                    steps {
+                        container('cdtools') {
+                            echo "Resource locked: ${env.lockResource}"
+                            createRelease(config)
+                        }
+                    }
+                }
+                stage('Transition Jira Tickets') {
+                    when {expression {return config.enableJiraTransition}}
+                    steps {
+                        script {
+                            if (env.BRANCH_NAME != config.defaultBranch && changeRequest()) {
+                                transitionJiraTickets(config, 'Ready for Review')
+                            } else if (env.BRANCH_NAME == config.defaultBranch) {
+                                transitionJiraTickets(config, 'Closed')
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        stage('Cello Deploy All Targets') {
+            steps {
+                celloDeployAllTargets(config)
+            }
+        }
+    }
+}

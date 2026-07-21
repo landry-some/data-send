@@ -1,0 +1,19 @@
+FROM docker.jsguru.com/docker-rmt/node:14.21.3-alpine
+
+ARG build
+
+LABEL cdk=${build}
+
+COPY cdk /cdk
+
+WORKDIR /cdk
+
+USER root
+
+RUN npm -g install typescript
+
+RUN npm ci
+
+ENV ENV dev
+
+RUN npm run test
