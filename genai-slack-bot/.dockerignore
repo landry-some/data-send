@@ -1,6 +1,0 @@
-*.md
-*.yaml
-.github/
-.pytest_cache/
-devenv/
-venv/
